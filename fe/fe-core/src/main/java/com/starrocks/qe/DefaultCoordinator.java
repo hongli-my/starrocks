@@ -1135,11 +1135,10 @@ public class DefaultCoordinator extends Coordinator {
         }
         
         for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
-            // If the execState fails to be cancelled, and it has been finished or not been deployed,
+            // If the execState fails to be cancelled (this node down or restart immediately),
             // count down the profileDoneSignal of this execState immediately,
-            // because the profile report will not arrive anymore for the finished or non-deployed execState.
-            if (!execState.cancelFragmentInstance(cancelReason, errorMessage) &&
-                    (!execState.hasBeenDeployed() || execState.isFinished())) {
+            // because the profile report will not arrive anymore for the finished or non-deployed or deploying execState.
+            if (!execState.cancelFragmentInstance(cancelReason, errorMessage)) {
                 queryProfile.finishInstance(execState.getInstanceId());
             }
         }
