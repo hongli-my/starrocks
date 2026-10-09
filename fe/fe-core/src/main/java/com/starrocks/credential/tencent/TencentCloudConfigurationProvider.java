@@ -23,6 +23,7 @@ import java.util.Map;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_SESSION_TOKEN;
 
 public class TencentCloudConfigurationProvider implements CloudConfigurationProvider {
     @Override
@@ -32,7 +33,8 @@ public class TencentCloudConfigurationProvider implements CloudConfigurationProv
         TencentCloudCredential tencentCloudCredential = new TencentCloudCredential(
                 properties.getOrDefault(TENCENT_COS_ACCESS_KEY, ""),
                 properties.getOrDefault(TENCENT_COS_SECRET_KEY, ""),
-                properties.getOrDefault(TENCENT_COS_ENDPOINT, "")
+                properties.getOrDefault(TENCENT_COS_ENDPOINT, ""),
+                properties.getOrDefault(TENCENT_COS_SESSION_TOKEN, "")
         );
         if (!tencentCloudCredential.validate()) {
             return null;

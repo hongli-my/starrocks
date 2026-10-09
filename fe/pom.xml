@@ -1146,6 +1146,15 @@ under the License.
                 <version>3.3.0-8.3.2</version>
             </dependency>
 
+            <!-- The COS SDK is used directly (see CosnFileIO), so declare it instead of relying on
+                 the transitive dependency of hadoop-cos. Keep the version in step with the
+                 cos_api.version that hadoop-cos builds against. -->
+            <dependency>
+                <groupId>com.qcloud</groupId>
+                <artifactId>cos_api-bundle</artifactId>
+                <version>5.6.137.2</version>
+            </dependency>
+
             <!-- hadoop-cos pulls tencentcloud-sdk 3.1.213 whose okhttp 2.7.5 is EOL;
                  3.1.1471+ ships okhttp3, keeping COS client-side encryption usable -->
             <dependency>

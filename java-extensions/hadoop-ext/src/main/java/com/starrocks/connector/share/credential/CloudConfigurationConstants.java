@@ -151,6 +151,7 @@ public class CloudConfigurationConstants {
     // Credential for Tencent COS
     public static final String TENCENT_COS_ACCESS_KEY = "tencent.cos.access_key";
     public static final String TENCENT_COS_SECRET_KEY = "tencent.cos.secret_key";
+    public static final String TENCENT_COS_SESSION_TOKEN = "tencent.cos.session_token";
     public static final String TENCENT_COS_ENDPOINT = "tencent.cos.endpoint";
 
     // Credential for Huawei Cloud OBS

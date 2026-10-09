@@ -133,9 +133,12 @@ Paimon catalog 的描述。此参数是可选的。
 
 | 参数                      | 是否必需 | 描述                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| paimon.catalog.type      | 是       | 您用于 Paimon 集群的元存储类型。将此参数设置为 `filesystem` 或 `hive`。 |
-| paimon.catalog.warehouse | 是       | 您的 Paimon 数据的仓库存储路径。                             |
+| paimon.catalog.type      | 是       | 您用于 Paimon 集群的元存储类型。将此参数设置为 `filesystem`、`hive` 或 `rest`。 |
+| paimon.catalog.warehouse | 使用 `filesystem` 时必填 | 您的 Paimon 数据的仓库存储路径。`hive` 或 `rest` catalog 会自行解析仓库路径，因此对它们来说该参数是可选的。 |
 | hive.metastore.uris      | 否       | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive 元存储启用了高可用性（HA），您可以指定多个元存储 URI，并用逗号（`,`）分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
+| paimon.catalog.uri       | `paimon.catalog.type` 为 `rest` 时必填 | 您的 Paimon REST catalog 服务端地址。格式：`http://<server_IP_address>:<server_port>`。 |
+| paimon.catalog.token     | 否       | 用于访问您的 Paimon REST catalog 服务端的 Bearer Token。 |
+| paimon.catalog.token.provider | 否 | 提供 `paimon.catalog.token` 的认证方式。默认值：`bear`。 |
 
 > **注意**
 >
@@ -423,6 +426,31 @@ StarRocks 会缓存 Paimon 元数据并在后台刷新，以下可选属性用�
 ### 示例
 
 以下示例创建一个名为 `paimon_catalog_fs` 的 Paimon catalog，其元存储类型 `paimon.catalog.type` 设置为 `filesystem`，用于从您的 Paimon 集群查询数据。
+
+#### Paimon REST catalog
+
+如果您的 Paimon 集群元数据由 Paimon REST catalog 服务端提供，请按如下方式创建 catalog。REST catalog 服务端会返回自己的 warehouse，并在启用 data token 时按表下发临时存储凭证，因此无需配置 `paimon.catalog.warehouse` 和 `StorageCredentialParams`。
+
+```SQL
+CREATE EXTERNAL CATALOG paimon_catalog_rest
+PROPERTIES
+(
+    "type" = "paimon",
+    "paimon.catalog.type" = "rest",
+    "paimon.catalog.uri" = "http://<server_IP_address>:<server_port>",
+    "paimon.catalog.token" = "<bearer_token>"
+);
+```
+
+> **注意**
+>
+> - `paimon.catalog.uri` 必须是 `http://` 或 `https://` 开头的 URL。
+> - 仅当服务端开启认证时才需要配置 `paimon.catalog.token`，`paimon.catalog.token.provider` 默认为 `bear`。
+> - 除非确有需要，不要再设置 `paimon.catalog.warehouse`：客户端会把它发给服务端（`GET /v1/config?warehouse=...`），与服务端自身的 warehouse 不一致时会被拒绝（`404`）。
+> - 服务端下发的临时存储凭证会自动刷新，并随每次扫描下发给 BE。它们是短期有效的，而一次扫描使用的是查询规划时那一次拿到的凭证，因此单条查询如果连续读取 Paimon 数据的时间超过凭证有效期，可能会在中途失败。
+> - Paimon catalog 在 StarRocks 中是只读的：支持查询，不支持写入。
+> - 同样支持 warehouse 在 S3 上的 REST catalog（`s3://`）：FE 通过 Paimon 的 S3 file io 读取，BE 收到的凭证为 `aws.s3.*`。S3 的 endpoint 与 region 来自服务端（`fs.s3a.endpoint` / `fs.s3a.endpoint.region`），也可以用 `paimon.option.*` 覆盖。
+> - 仅当服务端下发的凭证无法访问您的存储时，才需要配置 `StorageCredentialParams`。
 
 #### AWS S3
 

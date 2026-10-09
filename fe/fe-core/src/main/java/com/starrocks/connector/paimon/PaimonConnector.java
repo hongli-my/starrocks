@@ -42,8 +42,10 @@ import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.MemorySize;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.privilege.PrivilegedCatalog;
+import org.apache.paimon.rest.RESTCatalogOptions;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -56,6 +58,13 @@ import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 public class PaimonConnector implements Connector {
     public static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
+    public static final String PAIMON_CATALOG_URI = "paimon.catalog.uri";
+    public static final String PAIMON_CATALOG_TOKEN = "paimon.catalog.token";
+    public static final String PAIMON_CATALOG_TOKEN_PROVIDER = "paimon.catalog.token.provider";
+    public static final String PAIMON_REST_CATALOG_TYPE = "rest";
+    private static final String PAIMON_REST_DEFAULT_TOKEN_PROVIDER = "bear";
+    // the token providers paimon ships; anything else would fail deeper inside the client
+    private static final Set<String> PAIMON_REST_TOKEN_PROVIDERS = Set.of("bear", "dlf");
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     // implicit for user, mirrors iceberg_meta_cache_ttl_sec
@@ -105,10 +114,38 @@ public class PaimonConnector implements Connector {
             if (null != dlfCatalogId && !dlfCatalogId.isEmpty()) {
                 paimonOptions.setString(DLF_CATGALOG_ID, dlfCatalogId);
             }
+        } else if (catalogType.equalsIgnoreCase(PAIMON_REST_CATALOG_TYPE)) {
+            // A REST catalog knows its own warehouse (GET /v1/config), so only the endpoint and,
+            // when the server requires one, the bearer token have to be configured here.
+            String restUri = properties.get(PAIMON_CATALOG_URI);
+            if (Strings.isNullOrEmpty(restUri)) {
+                throw new StarRocksConnectorException("The property %s must be set if paimon catalog is rest.",
+                        PAIMON_CATALOG_URI);
+            }
+            restUri = restUri.trim();
+            if (!restUri.startsWith("http://") && !restUri.startsWith("https://")) {
+                throw new StarRocksConnectorException("The property %s must be an http(s) URL, but got '%s'.",
+                        PAIMON_CATALOG_URI, restUri);
+            }
+            paimonOptions.setString(URI.key(), restUri);
+            String token = properties.get(PAIMON_CATALOG_TOKEN);
+            if (!Strings.isNullOrEmpty(token)) {
+                String tokenProvider = properties
+                        .getOrDefault(PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_DEFAULT_TOKEN_PROVIDER)
+                        .trim().toLowerCase(Locale.ROOT);
+                if (!PAIMON_REST_TOKEN_PROVIDERS.contains(tokenProvider)) {
+                    throw new StarRocksConnectorException("The property %s must be one of %s, but got '%s'.",
+                            PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_TOKEN_PROVIDERS, tokenProvider);
+                }
+                paimonOptions.setString(RESTCatalogOptions.TOKEN.key(), token);
+                paimonOptions.setString(RESTCatalogOptions.TOKEN_PROVIDER.key(), tokenProvider);
+            }
         }
+        // hive / dlf / rest resolve their warehouse on their own.
         if (Strings.isNullOrEmpty(warehousePath)
                 && !catalogType.equals("hive")
-                && !catalogType.equalsIgnoreCase("dlf")) {
+                && !catalogType.equalsIgnoreCase("dlf")
+                && !catalogType.equalsIgnoreCase(PAIMON_REST_CATALOG_TYPE)) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         if (!Strings.isNullOrEmpty(warehousePath)) {

@@ -640,6 +640,12 @@ under the License.
             <artifactId>hadoop-cos</artifactId>
         </dependency>
 
+        <!-- used directly by the Paimon cosn file io, version managed next to hadoop-cos -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api-bundle</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
         <dependency>
             <groupId>com.qcloud</groupId>

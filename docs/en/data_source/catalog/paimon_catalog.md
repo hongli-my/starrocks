@@ -133,9 +133,12 @@ The following table describes the parameter you need to configure in `CatalogPar
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| paimon.catalog.type      | Yes      | The type of metastore that you use for your Paimon cluster. Set this parameter to `filesystem` or `hive`. |
-| paimon.catalog.warehouse | Yes      | The warehouse storage path of your Paimon data. |
+| paimon.catalog.type      | Yes      | The type of metastore that you use for your Paimon cluster. Set this parameter to `filesystem`, `hive`, or `rest`. |
+| paimon.catalog.warehouse | Yes for `filesystem` | The warehouse storage path of your Paimon data. A `hive` or `rest` catalog resolves its warehouse by itself, so this parameter is optional for them. |
 | hive.metastore.uris      | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| paimon.catalog.uri       | Yes if `paimon.catalog.type` is `rest` | The endpoint of your Paimon REST catalog server. Format: `http://<server_IP_address>:<server_port>`. |
+| paimon.catalog.token     | No       | The bearer token used to authenticate against your Paimon REST catalog server. |
+| paimon.catalog.token.provider | No  | The provider that supplies `paimon.catalog.token`. Default: `bear`. |
 
 > **NOTE**
 >
@@ -423,6 +426,31 @@ StarRocks caches Paimon metadata and refreshes it in the background. These optio
 ### Examples
 
 The following examples create a Paimon catalog named `paimon_catalog_fs` whose metastore type `paimon.catalog.type` is set to `filesystem` to query data from your Paimon cluster.
+
+#### Paimon REST catalog
+
+If the metadata of your Paimon cluster is served by a Paimon REST catalog server, create a catalog as follows. A REST catalog server reports its own warehouse and, when data tokens are enabled, vends temporary storage credentials per table, so `paimon.catalog.warehouse` and `StorageCredentialParams` are not required.
+
+```SQL
+CREATE EXTERNAL CATALOG paimon_catalog_rest
+PROPERTIES
+(
+    "type" = "paimon",
+    "paimon.catalog.type" = "rest",
+    "paimon.catalog.uri" = "http://<server_IP_address>:<server_port>",
+    "paimon.catalog.token" = "<bearer_token>"
+);
+```
+
+> **NOTE**
+>
+> - `paimon.catalog.uri` must be an `http://` or `https://` URL.
+> - `paimon.catalog.token` is only needed when the server requires authentication, and `paimon.catalog.token.provider` defaults to `bear`.
+> - Do not also set `paimon.catalog.warehouse` unless you really mean it: the client then sends it to the server (`GET /v1/config?warehouse=...`) and a value that differs from the server's own warehouse is rejected with `404`.
+> - Temporary storage credentials vended by the server are refreshed automatically and forwarded to the backends along with each scan. They are short-lived, and a scan uses the ones that were current when the query was planned, so a single query reading Paimon data for longer than their lifetime can fail part way through.
+> - A Paimon catalog is read-only in StarRocks: queries are supported, writes are not.
+> - A REST catalog whose warehouse lives on S3 (`s3://`) is supported the same way: the frontend reads it through Paimon's S3 file io, and the backend receives the vended credentials as `aws.s3.*`. For S3 the endpoint and region come from the server (`fs.s3a.endpoint` / `fs.s3a.endpoint.region`), and you can override them with `paimon.option.*`.
+> - Configure `StorageCredentialParams` only if your storage cannot be reached with the credentials the server vends.
 
 #### AWS S3
 

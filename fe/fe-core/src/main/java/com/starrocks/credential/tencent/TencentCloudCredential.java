@@ -22,19 +22,27 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 
 public class TencentCloudCredential implements CloudCredential {
     private final String accessKey;
     private final String secretKey;
     private final String endpoint;
+    private final String sessionToken;
 
     public TencentCloudCredential(String accessKey, String secretKey, String endpoint) {
+        this(accessKey, secretKey, endpoint, "");
+    }
+
+    public TencentCloudCredential(String accessKey, String secretKey, String endpoint, String sessionToken) {
         checkNotNull(accessKey);
         checkNotNull(secretKey);
         checkNotNull(endpoint);
+        checkNotNull(sessionToken);
         this.accessKey = accessKey;
         this.secretKey = secretKey;
         this.endpoint = endpoint;
+        this.sessionToken = sessionToken;
     }
 
     @Override
@@ -45,6 +53,9 @@ public class TencentCloudCredential implements CloudCredential {
         configuration.set("fs.cosn.userinfo.secretId", accessKey);
         configuration.set("fs.cosn.userinfo.secretKey", secretKey);
         configuration.set("fs.cosn.bucket.endpoint_suffix", endpoint);
+        if (!sessionToken.isEmpty()) {
+            configuration.set("fs.cosn.userinfo.sessionToken", sessionToken);
+        }
     }
 
     @Override
@@ -58,8 +69,16 @@ public class TencentCloudCredential implements CloudCredential {
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+        if (!sessionToken.isEmpty()) {
+            properties.put(AWS_S3_SESSION_TOKEN, sessionToken);
+        }
     }
 
+    /**
+     * Deliberately not redacted: this string ends up in the thrift cloud configuration string, which
+     * the backend uses as the cache key of its S3 client. Redacting would let two different
+     * credentials share a client and keep a rotated (expired) one alive.
+     */
     @Override
     public String toCredString() {
         return "TencentCloudCredential{" +

@@ -22,10 +22,13 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -84,7 +87,6 @@ public class PaimonScanNode extends ScanNode {
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.paimonTable = (PaimonTable) desc.getTable();
-        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -103,7 +105,21 @@ public class PaimonScanNode extends ScanNode {
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        ConnectorMetadata metadata = connector.getMetadata();
+        // The connector metadata is wrapped by the catalog layer, so unwrap it before asking for
+        // the credentials of this table.
+        if (metadata instanceof DelegatingConnectorMetadata) {
+            metadata = ((DelegatingConnectorMetadata) metadata).delegateFor(paimonTable);
+        }
+        // A Paimon REST catalog hands out short-lived credentials per table, so ask for the ones
+        // that belong to this table instead of the catalog-wide configuration.
+        if (metadata instanceof PaimonMetadata) {
+            cloudConfiguration = ((PaimonMetadata) metadata).getCloudConfiguration(paimonTable);
+        } else {
+            LOG.warn("Metadata of catalog {} is {}, falling back to its catalog level credentials",
+                    catalog, metadata.getClass().getName());
+            cloudConfiguration = metadata.getCloudConfiguration();
+        }
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
@@ -130,6 +146,11 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
+        // Resolved next to the split planning on purpose: both talk to the catalog, so this is a
+        // place that is already allowed to do I/O. Doing it in the constructor would add a network
+        // call (a token refresh) to a phase that is meant to stay free of it.
+        setupCloudCredential();
+
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()

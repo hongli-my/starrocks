@@ -28,6 +28,7 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.rest.RESTCatalogOptions;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
@@ -60,6 +61,88 @@ public class PaimonConnectorTest {
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
 
         new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
+    public void testCreateRestPaimonConnector() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+
+        // the endpoint is the only property a REST catalog needs; its warehouse comes from
+        // GET /v1/config, so it must not be required here
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)),
+                "The property paimon.catalog.uri must be set if paimon catalog is rest.");
+
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        Assertions.assertEquals("rest", options.get(CatalogOptions.METASTORE));
+        Assertions.assertEquals("http://127.0.0.1:18080", options.get(CatalogOptions.URI));
+        // without a configured token no auth option is injected, the server may not need one
+        Assertions.assertNull(options.get(RESTCatalogOptions.TOKEN));
+        Assertions.assertNull(options.get(RESTCatalogOptions.TOKEN_PROVIDER));
+    }
+
+    @Test
+    public void testRestPaimonConnectorTokenOptions() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN, "init_token");
+
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        Assertions.assertEquals("init_token", options.get(RESTCatalogOptions.TOKEN));
+        // the bearer provider is what a Paimon REST catalog server expects by default
+        Assertions.assertEquals("bear", options.get(RESTCatalogOptions.TOKEN_PROVIDER));
+
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_PROVIDER, "dlf");
+        PaimonConnector custom = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals("dlf", custom.getPaimonOptions().get(RESTCatalogOptions.TOKEN_PROVIDER));
+    }
+
+    @Test
+    public void testRestPaimonConnectorWarehouseIsOptional() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        properties.put("paimon.option.warehouse", "cosn://bucket/paimon");
+
+        // a user supplied warehouse still wins over the one advertised by the server
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals("cosn://bucket/paimon", connector.getPaimonOptions().get(CatalogOptions.WAREHOUSE));
+    }
+
+    @Test
+    public void testRestPaimonConnectorValidatesUri() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        // a bare host is a common typo and would otherwise fail deep inside the paimon client
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "127.0.0.1:18080");
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+
+        // surrounding whitespace is tolerated
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, " http://127.0.0.1:18080 ");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals("http://127.0.0.1:18080", connector.getPaimonOptions().get(CatalogOptions.URI));
+    }
+
+    @Test
+    public void testRestPaimonConnectorValidatesTokenProvider() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN, "init_token");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_PROVIDER, "oauth2");
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+
+        // the provider is normalised before it is handed to paimon
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_PROVIDER, " DLF ");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals("dlf", connector.getPaimonOptions().get(RESTCatalogOptions.TOKEN_PROVIDER));
     }
 
     @Test

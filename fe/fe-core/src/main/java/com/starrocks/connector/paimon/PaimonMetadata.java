@@ -871,6 +871,17 @@ public class PaimonMetadata implements ConnectorMetadata {
         return hdfsEnvironment.getCloudConfiguration();
     }
 
+    /**
+     * Resolves the credentials a scan of {@code table} needs. A Paimon REST catalog that vends
+     * temporary credentials returns them per table, so the catalog-level configuration is only a
+     * fallback for catalogs that do not hand out data tokens.
+     */
+    public CloudConfiguration getCloudConfiguration(PaimonTable table) {
+        CloudConfiguration configuration = PaimonRestCredentials.buildCloudConfiguration(
+                table == null ? null : table.getNativeTable(), paimonNativeCatalog);
+        return configuration == null ? getCloudConfiguration() : configuration;
+    }
+
     public long getTableUpdateTime(String dbName, String tblName) {
         Identifier snapshotsTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$snapshots"));
         RecordReaderIterator<InternalRow> iterator = null;
