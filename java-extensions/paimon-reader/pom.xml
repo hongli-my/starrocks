@@ -109,6 +109,15 @@
             <artifactId>paimon-oss</artifactId>
             <version>${paimon.version}</version>
         </dependency>
+
+        <!-- The cosn file io (com.starrocks.paimon.reader.fs.CosnFileIO) talks to the COS SDK
+             directly, because neither paimon's own cosn support nor hadoop-cos can use the
+             short-lived credentials a Paimon REST catalog vends. -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api-bundle</artifactId>
+            <version>5.6.137.2</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -59,6 +59,10 @@ import java.util.Map;
  * when two loaders claim the same scheme ("Multiple FileIO for scheme"). Paimon's own
  * {@code paimon-cosn} must therefore never be put on the frontend classpath next to this class.
  *
+ * <p>A copy of this class ships with the backend's JNI reader
+ * ({@code java-extensions/paimon-reader/src/main/java/com/starrocks/paimon/reader/fs/CosnFileIO.java}),
+ * which resolves the {@code cosn} scheme on its own classpath. Keep the two in sync.
+ *
  * <p>Only the methods needed to plan reads are implemented; the connector treats the catalog as
  * read-only, so writing is rejected.
  */

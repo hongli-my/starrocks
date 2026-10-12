@@ -684,6 +684,13 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
+        # dependency:copy-dependencies never prunes its output directory, so a library that is no
+        # longer a dependency of the current version stays behind and keeps being packaged. That
+        # is not harmless on the JVM: paimon's service loader keeps one file io per scheme and
+        # resolves a provider by class name, so a stale paimon-s3 shadows the current one and then
+        # rejects the options the catalog actually passes. These dirs are rewritten by the build,
+        # drop them first.
+        rm -rf */target/*-reader-lib common-runtime/target/common-runtime-lib hadoop-lib/target/hadoop-lib
         ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
