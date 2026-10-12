@@ -42,6 +42,7 @@ import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.MemorySize;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.privilege.PrivilegedCatalog;
+import org.apache.paimon.rest.RESTApi;
 import org.apache.paimon.rest.RESTCatalogOptions;
 
 import java.time.Duration;
@@ -49,6 +50,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
@@ -60,9 +62,13 @@ public class PaimonConnector implements Connector {
     public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     public static final String PAIMON_CATALOG_URI = "paimon.catalog.uri";
     public static final String PAIMON_CATALOG_TOKEN = "paimon.catalog.token";
+    public static final String PAIMON_CATALOG_TOKEN_HEADER = "paimon.catalog.token.header";
     public static final String PAIMON_CATALOG_TOKEN_PROVIDER = "paimon.catalog.token.provider";
     public static final String PAIMON_REST_CATALOG_TYPE = "rest";
     private static final String PAIMON_REST_DEFAULT_TOKEN_PROVIDER = "bear";
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+    /** An HTTP header name is an RFC 7230 token. */
+    private static final Pattern HEADER_NAME_PATTERN = Pattern.compile("^[A-Za-z0-9!#$%&'*+.^_`|~-]+$");
     // the token providers paimon ships; anything else would fail deeper inside the client
     private static final Set<String> PAIMON_REST_TOKEN_PROVIDERS = Set.of("bear", "dlf");
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -130,15 +136,35 @@ public class PaimonConnector implements Connector {
             paimonOptions.setString(URI.key(), restUri);
             String token = properties.get(PAIMON_CATALOG_TOKEN);
             if (!Strings.isNullOrEmpty(token)) {
-                String tokenProvider = properties
-                        .getOrDefault(PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_DEFAULT_TOKEN_PROVIDER)
-                        .trim().toLowerCase(Locale.ROOT);
-                if (!PAIMON_REST_TOKEN_PROVIDERS.contains(tokenProvider)) {
-                    throw new StarRocksConnectorException("The property %s must be one of %s, but got '%s'.",
-                            PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_TOKEN_PROVIDERS, tokenProvider);
+                String tokenHeader = properties
+                        .getOrDefault(PAIMON_CATALOG_TOKEN_HEADER, AUTHORIZATION_HEADER).trim();
+                if (!HEADER_NAME_PATTERN.matcher(tokenHeader).matches()) {
+                    throw new StarRocksConnectorException("The property %s must be a valid HTTP header name, "
+                            + "but got '%s'.", PAIMON_CATALOG_TOKEN_HEADER, tokenHeader);
                 }
-                paimonOptions.setString(RESTCatalogOptions.TOKEN.key(), token);
-                paimonOptions.setString(RESTCatalogOptions.TOKEN_PROVIDER.key(), tokenProvider);
+                if (AUTHORIZATION_HEADER.equalsIgnoreCase(tokenHeader)) {
+                    String tokenProvider = properties
+                            .getOrDefault(PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_DEFAULT_TOKEN_PROVIDER)
+                            .trim().toLowerCase(Locale.ROOT);
+                    if (!PAIMON_REST_TOKEN_PROVIDERS.contains(tokenProvider)) {
+                        throw new StarRocksConnectorException("The property %s must be one of %s, but got '%s'.",
+                                PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_REST_TOKEN_PROVIDERS, tokenProvider);
+                    }
+                    paimonOptions.setString(RESTCatalogOptions.TOKEN.key(), token);
+                    paimonOptions.setString(RESTCatalogOptions.TOKEN_PROVIDER.key(), tokenProvider);
+                } else {
+                    if (properties.containsKey(PAIMON_CATALOG_TOKEN_PROVIDER)) {
+                        throw new StarRocksConnectorException("The property %s only applies when %s is '%s'.",
+                                PAIMON_CATALOG_TOKEN_PROVIDER, PAIMON_CATALOG_TOKEN_HEADER, AUTHORIZATION_HEADER);
+                    }
+                    // The token travels verbatim on the server's own header, through the
+                    // header.<name> option paimon puts on every request. Paimon still insists on a
+                    // token provider being set, so point it at the one that adds no Authorization
+                    // header of its own.
+                    paimonOptions.setString(RESTApi.HEADER_PREFIX + tokenHeader, token);
+                    paimonOptions.setString(RESTCatalogOptions.TOKEN_PROVIDER.key(),
+                            HeaderTokenAuthProviderFactory.IDENTIFIER);
+                }
             }
         }
         // hive / dlf / rest resolve their warehouse on their own.

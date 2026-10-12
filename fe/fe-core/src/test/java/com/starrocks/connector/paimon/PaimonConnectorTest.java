@@ -145,6 +145,42 @@ public class PaimonConnectorTest {
         Assertions.assertEquals("dlf", connector.getPaimonOptions().get(RESTCatalogOptions.TOKEN_PROVIDER));
     }
 
+    /** A server can authenticate on a header of its own instead of {@code Authorization}. */
+    @Test
+    public void testRestPaimonConnectorCustomTokenHeader() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN, "init_token");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_HEADER, "X-Paimon-Bypass-Token");
+
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        // paimon puts every header.<name> option on all of its requests, the token goes verbatim
+        Assertions.assertEquals("init_token", options.toMap().get("header.X-Paimon-Bypass-Token"));
+        // paimon refuses to work without a token provider, ours adds no Authorization header
+        Assertions.assertEquals(HeaderTokenAuthProviderFactory.IDENTIFIER, options.get(RESTCatalogOptions.TOKEN_PROVIDER));
+        Assertions.assertNull(options.get(RESTCatalogOptions.TOKEN));
+    }
+
+    @Test
+    public void testRestPaimonConnectorRejectsBadTokenHeader() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PaimonConnector.PAIMON_CATALOG_TYPE, "rest");
+        properties.put(PaimonConnector.PAIMON_CATALOG_URI, "http://127.0.0.1:18080");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN, "init_token");
+        // a space or a line break in a header name would be a request smuggling hazard
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_HEADER, "X-Bad Header");
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+
+        // a token provider only makes sense for the Authorization header
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_HEADER, "X-Paimon-Bypass-Token");
+        properties.put(PaimonConnector.PAIMON_CATALOG_TOKEN_PROVIDER, "bear");
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+    }
+
     @Test
     public void testCacheLifetimeMatchesIceberg() {
         Map<String, String> properties = new HashMap<>();

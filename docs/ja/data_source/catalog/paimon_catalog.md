@@ -137,8 +137,9 @@ StarRocks が Paimon クラスターのメタデータにアクセスする方�
 | paimon.catalog.warehouse | `filesystem` の場合は必須 | Paimon データのウェアハウスストレージパス。`hive` または `rest` catalog はウェアハウスを自身で解決するため、これらの場合このパラメータはオプションです。 |
 | hive.metastore.uris      | いいえ | Hive メタストアの URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 | paimon.catalog.uri       | `paimon.catalog.type` が `rest` の場合は必須 | Paimon REST catalog サーバーのエンドポイント。形式: `http://<server_IP_address>:<server_port>`。 |
-| paimon.catalog.token     | いいえ | Paimon REST catalog サーバーへの認証に使用するベアラートークン。 |
-| paimon.catalog.token.provider | いいえ | `paimon.catalog.token` を提供するプロバイダー。デフォルト: `bear`。 |
+| paimon.catalog.token     | いいえ | Paimon REST catalog サーバーへの認証に使用するトークン。 |
+| paimon.catalog.token.header | いいえ | `paimon.catalog.token` を運ぶ HTTP ヘッダー名。デフォルトは `Authorization` で、`Authorization: Bearer <token>` を送信します。それ以外の名前（例: `X-Paimon-Bypass-Token`）を指定すると、そのヘッダーにトークンをそのまま送信し、`Authorization` ヘッダーは一切送信しません。 |
+| paimon.catalog.token.provider | いいえ | `paimon.catalog.token` を提供するプロバイダー。`Authorization` ヘッダーの場合にのみ適用されます。デフォルト: `bear`。 |
 
 > **注意**
 >
@@ -445,7 +446,7 @@ PROPERTIES
 > **注意**
 >
 > - `paimon.catalog.uri` は `http://` または `https://` の URL である必要があります。
-> - `paimon.catalog.token` はサーバーが認証を要求する場合にのみ必要です。`paimon.catalog.token.provider` のデフォルトは `bear` です。
+> - `paimon.catalog.token` はサーバーが認証を要求する場合にのみ必要です。`paimon.catalog.token.provider` のデフォルトは `bear` です。サーバーが独自のヘッダー（例: `X-Paimon-Bypass-Token`）でトークンを受け取る場合は、`paimon.catalog.token.header` にそのヘッダー名を設定してください。
 > - 意図がない限り `paimon.catalog.warehouse` は設定しないでください。クライアントはこれをサーバーに送信し（`GET /v1/config?warehouse=...`）、サーバー自身の warehouse と一致しない値は `404` で拒否されます。
 > - サーバーが発行する一時的なストレージ認証情報は自動的に更新され、各スキャン時にバックエンドへ転送されます。ただし有効期間は短く、スキャンはクエリの計画時に取得したものを使用するため、1 つのクエリが有効期間を超えて Paimon データを読み続けると途中で失敗する可能性があります。
 > - StarRocks の Paimon catalog は読み取り専用です。クエリはサポートされますが、書き込みはできません。

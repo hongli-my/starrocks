@@ -137,8 +137,9 @@ Paimon catalog 的描述。此参数是可选的。
 | paimon.catalog.warehouse | 使用 `filesystem` 时必填 | 您的 Paimon 数据的仓库存储路径。`hive` 或 `rest` catalog 会自行解析仓库路径，因此对它们来说该参数是可选的。 |
 | hive.metastore.uris      | 否       | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive 元存储启用了高可用性（HA），您可以指定多个元存储 URI，并用逗号（`,`）分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 | paimon.catalog.uri       | `paimon.catalog.type` 为 `rest` 时必填 | 您的 Paimon REST catalog 服务端地址。格式：`http://<server_IP_address>:<server_port>`。 |
-| paimon.catalog.token     | 否       | 用于访问您的 Paimon REST catalog 服务端的 Bearer Token。 |
-| paimon.catalog.token.provider | 否 | 提供 `paimon.catalog.token` 的认证方式。默认值：`bear`。 |
+| paimon.catalog.token     | 否       | 用于访问您的 Paimon REST catalog 服务端的凭证。 |
+| paimon.catalog.token.header | 否    | 携带 `paimon.catalog.token` 的 HTTP header 名。默认 `Authorization`，即发送 `Authorization: Bearer <token>`；填其它名字（例如 `X-Paimon-Bypass-Token`）则在该 header 上原样发送凭证，且**完全不发 `Authorization`**。 |
+| paimon.catalog.token.provider | 否 | 提供 `paimon.catalog.token` 的认证方式。仅对 `Authorization` header 生效。默认值：`bear`。 |
 
 > **注意**
 >
@@ -445,7 +446,7 @@ PROPERTIES
 > **注意**
 >
 > - `paimon.catalog.uri` 必须是 `http://` 或 `https://` 开头的 URL。
-> - 仅当服务端开启认证时才需要配置 `paimon.catalog.token`，`paimon.catalog.token.provider` 默认为 `bear`。
+> - 仅当服务端开启认证时才需要配置 `paimon.catalog.token`，`paimon.catalog.token.provider` 默认为 `bear`。如果服务端要求把凭证放在自有 header 上（例如 `X-Paimon-Bypass-Token`），将 `paimon.catalog.token.header` 设为该 header 名即可。
 > - 除非确有需要，不要再设置 `paimon.catalog.warehouse`：客户端会把它发给服务端（`GET /v1/config?warehouse=...`），与服务端自身的 warehouse 不一致时会被拒绝（`404`）。
 > - 服务端下发的临时存储凭证会自动刷新，并随每次扫描下发给 BE。它们是短期有效的，而一次扫描使用的是查询规划时那一次拿到的凭证，因此单条查询如果连续读取 Paimon 数据的时间超过凭证有效期，可能会在中途失败。
 > - Paimon catalog 在 StarRocks 中是只读的：支持查询，不支持写入。

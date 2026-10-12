@@ -137,8 +137,9 @@ The following table describes the parameter you need to configure in `CatalogPar
 | paimon.catalog.warehouse | Yes for `filesystem` | The warehouse storage path of your Paimon data. A `hive` or `rest` catalog resolves its warehouse by itself, so this parameter is optional for them. |
 | hive.metastore.uris      | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 | paimon.catalog.uri       | Yes if `paimon.catalog.type` is `rest` | The endpoint of your Paimon REST catalog server. Format: `http://<server_IP_address>:<server_port>`. |
-| paimon.catalog.token     | No       | The bearer token used to authenticate against your Paimon REST catalog server. |
-| paimon.catalog.token.provider | No  | The provider that supplies `paimon.catalog.token`. Default: `bear`. |
+| paimon.catalog.token     | No       | The token used to authenticate against your Paimon REST catalog server. |
+| paimon.catalog.token.header | No    | The HTTP header that carries `paimon.catalog.token`. Default: `Authorization`, which sends `Authorization: Bearer <token>`. Any other name (for example `X-Paimon-Bypass-Token`) sends the token verbatim on that header and no `Authorization` header at all. |
+| paimon.catalog.token.provider | No  | The provider that supplies `paimon.catalog.token`. Only applies to the `Authorization` header. Default: `bear`. |
 
 > **NOTE**
 >
@@ -445,7 +446,7 @@ PROPERTIES
 > **NOTE**
 >
 > - `paimon.catalog.uri` must be an `http://` or `https://` URL.
-> - `paimon.catalog.token` is only needed when the server requires authentication, and `paimon.catalog.token.provider` defaults to `bear`.
+> - `paimon.catalog.token` is only needed when the server requires authentication, and `paimon.catalog.token.provider` defaults to `bear`. If your server expects the token on a header of its own, such as `X-Paimon-Bypass-Token`, set `paimon.catalog.token.header` to that header name.
 > - Do not also set `paimon.catalog.warehouse` unless you really mean it: the client then sends it to the server (`GET /v1/config?warehouse=...`) and a value that differs from the server's own warehouse is rejected with `404`.
 > - Temporary storage credentials vended by the server are refreshed automatically and forwarded to the backends along with each scan. They are short-lived, and a scan uses the ones that were current when the query was planned, so a single query reading Paimon data for longer than their lifetime can fail part way through.
 > - A Paimon catalog is read-only in StarRocks: queries are supported, writes are not.
